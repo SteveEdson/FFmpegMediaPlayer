@@ -31,11 +31,16 @@ import java.util.List;
 import android.annotation.SuppressLint;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
+import android.graphics.SurfaceTexture;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
+import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -523,7 +528,8 @@ public class FFmpegMediaPlayer
     private static List<byte []> mAudioBuffer = null;
     private static int mMinBufferSize = 0;
     private static int mBytesWritten = 0;
-	
+	private static String FFMPEG_PATH = "";
+    
     /**
        Constant to retrieve only the new metadata since the last
        call.
@@ -570,51 +576,55 @@ public class FFmpegMediaPlayer
 	};
 	
     static {
-    	StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
-    	
-    	StringBuffer path = null;
-    	File file = null;
-    	boolean foundLibs = false;
-    	
-    	for (int j = 0; j < stackTraceElements.length; j++) {
-    		String libraryPath = stackTraceElements[j].getClassName();
-    	
-    		String [] packageFragments = libraryPath.trim().split("\\.");
-    	
-    		path = new StringBuffer(LIBRARY_PATH);
-    	
-    		for (int i = 0; i < packageFragments.length; i++) {
-    			if (i > 0) {
-    				path.append(".");
-    			}
-    		
-    			path.append(packageFragments[i]);
-    			try {
-    				//System.load(path.toString() + "/lib/" + JNI_LIBRARIES[0]);
-    				file = new File(path.toString() + "/lib/" + JNI_LIBRARIES[0]);
-    				if (file.exists()) {
-    					path.append("/lib/");
-    					foundLibs = true;
-    					break;
-    				}
-    			} catch (UnsatisfiedLinkError ex) {
-    			}
-    		}
-    		
-    		if (foundLibs) {
-    			break;
-    		}
-    	}
-    	
-    	if (!foundLibs) {
-    		Log.e(TAG, TAG + " libraries not found. Did you forget to add them to your libs folder?");
-    		throw new UnsatisfiedLinkError();
-    	}
-    	
-    	for (int i = 0; i < JNI_LIBRARIES.length; i++) {
-    		System.load(path.toString() + JNI_LIBRARIES[i]);
-    	}
-    	
+//    	StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
+//    	
+//    	StringBuffer path = null;
+//    	File file = null;
+//    	boolean foundLibs = false;
+//    	
+//    	for (int j = 0; j < stackTraceElements.length; j++) {
+//    		String libraryPath = stackTraceElements[j].getClassName();
+//    	
+//    		String [] packageFragments = libraryPath.trim().split("\\.");
+//    	
+//    		path = new StringBuffer(LIBRARY_PATH);
+//    		Log.w(TAG, "Looking for ffmpeg in " + FFMPEG_PATH);
+//
+//    		for (int i = 0; i < packageFragments.length; i++) {
+//    			if (i > 0) {
+//    				path.append(".");
+//    			}
+//    		
+//    			path.append(packageFragments[i]);
+//    			try {
+//    				//System.load(path.toString() + "/lib/" + JNI_LIBRARIES[0]);
+//
+//    				Log.w(TAG, "Looking for ffmpeg in " + FFMPEG_PATH + "/" + JNI_LIBRARIES[0]);
+//    				
+//    				file = new File(FFMPEG_PATH + "/" + JNI_LIBRARIES[0]);
+//    				if (file.exists()) {
+//    					path.append("/lib/");
+//    					foundLibs = true;
+//    					break;
+//    				}
+//    			} catch (UnsatisfiedLinkError ex) {
+//    			}
+//    		}
+//    		
+//    		if (foundLibs) {
+//    			break;
+//    		}
+//    	}
+//    	
+//    	if (!foundLibs) {
+//    		Log.e(TAG, TAG + " libraries not found. Did you forget to add them to your libs folder?");
+//    		throw new UnsatisfiedLinkError();
+//    	}
+//    	
+//    	for (int i = 0; i < JNI_LIBRARIES.length; i++) {
+//    		System.load(FFMPEG_PATH + "/" + JNI_LIBRARIES[i]);
+//    	}
+//    	
         native_init();
         bind_variables(mAudioFrameBuffer, mAudioFrameBufferDataLength);
     }
@@ -642,10 +652,11 @@ public class FFmpegMediaPlayer
      * to free the resources. If not released, too many MediaPlayer instances may
      * result in an exception.</p>
      */
-	public FFmpegMediaPlayer() {
+	public FFmpegMediaPlayer(Context ctx) {
 		super();
 		
-		initializeStaticCompatMethods();
+		setLibPath(ctx);
+
 		
         Looper looper;
         if ((looper = Looper.myLooper()) != null) {
@@ -713,6 +724,77 @@ public class FFmpegMediaPlayer
         if (retcode != 0) {
             throw new RuntimeException("failure code: " + retcode);
         }
+    }
+    
+    public void setLibPath(Context ctx) {
+    	Log.e(TAG, "Set Lib Path");
+    	
+        PackageManager m = ctx.getPackageManager();
+        String s = ctx.getPackageName();
+        try {
+            PackageInfo p = m.getPackageInfo(s, 0);
+            s = p.applicationInfo.dataDir;
+        } catch (NameNotFoundException e) {
+            Log.w(TAG, "Error Package name not found ", e);
+        }
+
+        FFMPEG_PATH = s + "/lib/";
+        
+        Log.e(TAG, "Lib Path set to " + s + "/lib/");
+        
+    	StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
+    	
+    	StringBuffer path = null;
+    	File file = null;
+    	boolean foundLibs = false;
+    	
+    	for (int j = 0; j < stackTraceElements.length; j++) {
+    		String libraryPath = stackTraceElements[j].getClassName();
+    	
+    		String [] packageFragments = libraryPath.trim().split("\\.");
+    	
+    		path = new StringBuffer(LIBRARY_PATH);
+    		Log.w(TAG, "Looking for ffmpeg in " + FFMPEG_PATH);
+
+    		for (int i = 0; i < packageFragments.length; i++) {
+    			if (i > 0) {
+    				path.append(".");
+    			}
+    		
+    			path.append(packageFragments[i]);
+    			try {
+    				//System.load(path.toString() + "/lib/" + JNI_LIBRARIES[0]);
+
+    				Log.w(TAG, "Looking for ffmpeg in " + FFMPEG_PATH + "/" + JNI_LIBRARIES[0]);
+    				
+    				file = new File(FFMPEG_PATH + "/" + JNI_LIBRARIES[0]);
+    				if (file.exists()) {
+    					path.append("/lib/");
+    					foundLibs = true;
+    					break;
+    				}
+    			} catch (UnsatisfiedLinkError ex) {
+    			}
+    		}
+    		
+    		if (foundLibs) {
+    			break;
+    		}
+    	}
+    	
+    	if (!foundLibs) {
+    		Log.e(TAG, TAG + " libraries not found. Did you forget to add them to your libs folder?");
+    		throw new UnsatisfiedLinkError();
+    	}
+    	
+    	for (int i = 0; i < JNI_LIBRARIES.length; i++) {
+    		System.load(FFMPEG_PATH + "/" + JNI_LIBRARIES[i]);
+    	}
+    	
+        native_init();
+        bind_variables(mAudioFrameBuffer, mAudioFrameBufferDataLength);
+        
+		initializeStaticCompatMethods();
     }
 
     /**
@@ -852,9 +934,9 @@ public class FFmpegMediaPlayer
      * @return a MediaPlayer object, or null if creation failed
      */
     public static FFmpegMediaPlayer create(Context context, Uri uri, SurfaceHolder holder) {
-
+    	
         try {
-        	FFmpegMediaPlayer mp = new FFmpegMediaPlayer();
+        	FFmpegMediaPlayer mp = new FFmpegMediaPlayer(context);
             // TODO: add this code back
             //mp.setDataSource(context, uri);
             if (holder != null) {
@@ -895,7 +977,7 @@ public class FFmpegMediaPlayer
             AssetFileDescriptor afd = context.getResources().openRawResourceFd(resid);
             if (afd == null) return null;
 
-            FFmpegMediaPlayer mp = new FFmpegMediaPlayer();
+            FFmpegMediaPlayer mp = new FFmpegMediaPlayer(context);
             // TODO: add this code back
             //mp.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
             afd.close();
